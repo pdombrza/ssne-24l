@@ -17,31 +17,16 @@ TEST_PATH = "pakiet/test_data.csv"
 
 class SimpleClassifier(nn.Module):
 
-    def __init__(self, num_inputs, num_hidden, num_outputs):
+    def __init__(self, inputsList: list[int], neuronsList: list[int], outputs: int, activationFunc: nn.Module = nn.ReLU()):
         super().__init__()
-        # Initialize the modules we need to build the network
-        self.linear1 = nn.Linear(num_inputs, num_hidden, dtype=torch.float64)
-        self.act_fn1 = nn.LeakyReLU()
-        self.linear2 = nn.Linear(num_hidden, num_hidden, dtype=torch.float64)
-        self.act_fn2 = nn.LeakyReLU()
-        self.linear3 = nn.Linear(num_hidden, num_hidden, dtype=torch.float64)
-        self.act_fn3 = nn.LeakyReLU()
-        self.linear4 = nn.Linear(num_hidden, num_hidden, dtype=torch.float64)
-        self.act_fn4 = nn.LeakyReLU()
-        self.linear5 = nn.Linear(num_hidden, num_outputs, dtype=torch.float64)
+        self._layers = nn.Sequential()
+        for inputs, neurons in zip(inputsList, neuronsList):
+            self._layers.append(nn.Linear(inputs, neurons, dtype=torch.float64))
+            self._layers.append(activationFunc)
+        self._layers.append(nn.Linear(neuronsList[-1], outputs, dtype=torch.float64))
 
     def forward(self, x):
-        # Perform the calculation of the model to determine the prediction
-        x = self.linear1(x)
-        x = self.act_fn1(x)
-        x = self.linear2(x)
-        x = self.act_fn2(x)
-        x = self.linear3(x)
-        x = self.act_fn3(x)
-        x = self.linear4(x)
-        x = self.act_fn4(x)
-        x = self.linear5(x)
-        return x
+        return self._layers(x)
 
 
 def prepare_cuda() -> None:
@@ -58,17 +43,15 @@ def prepare_cuda() -> None:
 
 def encode_categorical(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     dummies = pd.get_dummies(data=df, columns=columns, drop_first=True, dtype=float)
-    df_dummies = pd.concat([df, dummies], axis=1)
-    df_dummies.drop(labels=columns, axis=1, inplace=True)
-    return df_dummies
+    return dummies
 
 
-def transform_func(x: float) -> str:
+def transform_func(x: float) -> int:
     if x < 100000:
-        return "cheap"
+        return 0
     if x < 350000:
-        return "average"
-    return "expensive"
+        return 1
+    return 2
 
 
 def split_data(df: pd.DataFrame, y_col: str) -> tuple:
@@ -93,10 +76,11 @@ def main():
     df_test = pd.read_csv(TEST_PATH)
 
     df_train["SalePrice"] = df_train["SalePrice"].map(transform_func) # This might be optional - second idea is to use regression and map answers to available classes
-    categorical = ["HallwayType", "SalePrice", "HeatingType", "AptManageType", "TimeToBusStop", "TimeToSubway", "SubwayStation"]
+    categorical = ["HallwayType", "HeatingType", "AptManageType", "TimeToBusStop", "TimeToSubway", "SubwayStation"]
     df_train = encode_categorical(df_train, categorical)
+    df_test = encode_categorical(df_test, categorical)
 
-    X_train, y_train, X_validate, y_validate, X_test, y_test = split_data(df_train, col="SalePrice")
+    X_train, y_train, X_validate, y_validate, X_test, y_test = split_data(df_train, y_col="SalePrice")
 
 
     scaler = StandardScaler()
@@ -110,7 +94,7 @@ def main():
     print(next(iter(train_dataloader)))
 
 
-    model = SimpleClassifier(num_inputs=11, num_hidden=180, num_outputs=7)
+    model = SimpleClassifier([27, 180, 180, 180], [180, 180, 180, 180], 3)
     optimizer = torch.optim.SGD(model.parameters(), lr = 0.15)
     for name, param in model.named_parameters():
         print(f"Parameter {name}, shape {param.shape} dtype: {param.dtype}")
@@ -158,21 +142,21 @@ def main():
     acc = true_preds / num_preds
     print(f"Accuracy of the model: {100.0*acc:4.2f}%")
 
-    model = model.to(device)
-    state_dict = model.state_dict()
-    print(state_dict)
-    torch.save(state_dict, "simple_model.tar")
-    torch.save(model,"test")
+    # model = model.to(device)
+    # state_dict = model.state_dict()
+    # print(state_dict)
+    # torch.save(state_dict, "simple_model.tar")
+    # torch.save(model,"test")
 
-    # Load state dict from the disk (make sure it is the same name as above)
-    state_dict = torch.load("simple_model.tar")
+    # # Load state dict from the disk (make sure it is the same name as above)
+    # state_dict = torch.load("simple_model.tar")
 
-    # Create a new model and load the state
-    new_model = SimpleClassifier(num_inputs=11, num_hidden=180, num_outputs=7).to(device)
-    new_model.load_state_dict(state_dict)
-    # Verify that the parameters are the same
-    print("Original model\n", model.state_dict())
-    print("\nLoaded model\n", new_model.state_dict())
+    # # Create a new model and load the state
+    # new_model = SimpleClassifier(num_inputs=27, num_hidden=180, num_outputs=3).to(device)
+    # new_model.load_state_dict(state_dict)
+    # # Verify that the parameters are the same
+    # print("Original model\n", model.state_dict())
+    # print("\nLoaded model\n", new_model.state_dict())
 
 
 if __name__ == "__main__":
