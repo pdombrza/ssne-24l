@@ -1,4 +1,7 @@
 __pycache__
 *.pyc
+.vscode
+
 data
 lab1
+lab3
