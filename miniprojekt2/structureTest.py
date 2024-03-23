@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.utils.data as data
 from sklearn.model_selection import train_test_split
 from copy import deepcopy
-
+from sklearn.metrics import precision_score, accuracy_score
 
 class SimpleClassifier(nn.Module):
 
@@ -64,7 +64,15 @@ def transform_func(trueLabels: np.ndarray) -> int:
         else:
             trueLabels[iterator] = 2
 
+def saveToFile(filename: str, text: str, toAppend: bool):
+    mode = "w"
+    if toAppend:
+        mode = "a"
+    with open(filename, mode) as plik:
+        plik.write(text)
+
 def main():
+    saveToFile("structureTests.txt", f'', toAppend=False)
     # prepare cuda
     device = torch.device("cuda")
     prepare_cuda()
@@ -93,47 +101,49 @@ def main():
     # print(next(iter(trainDataLoader)))
 
     # Train model
-    model = SimpleClassifier([27, 50], [50, 50], 1)
-    optimizer = torch.optim.SGD(model.parameters(), lr = 0.001)
-    model.to(device)
-    lossCalc = nn.L1Loss()
-    model.train()
-    for epoch in range(100):
-        for data_inputs, data_labels in trainDataLoader:
-            optimizer.zero_grad()
-            data_inputs = data_inputs.to(device)
-            data_labels = data_labels.to(device)
-            preds = model(data_inputs)
-            preds = preds.squeeze(dim=1)
-            loss = lossCalc(preds, data_labels)
-            loss.backward()
-            optimizer.step()
-        print(f"Epoch: {epoch}, loss: {loss.item():.3}")
+    modelArgs = [[[27, 50], [50, 50], 1, nn.ReLU()], [[27, 100], [100, 100], 1, nn.Sigmoid()], [[27, 270], [270, 270], 1, nn.Tanh()],
+                 [[27, 50, 50], [50, 50, 50], 1, nn.Sigmoid()], [[27, 100, 100], [100, 100, 100], 1, nn.ReLU()], [[27, 270, 270], [270, 270, 270], 1, nn.Tanh()],
+                 [[27, 50, 50, 50], [50, 50, 50, 50], 1, nn.Tanh()], [[27, 100, 100, 100], [100, 100, 100, 100], 1, nn.ReLU()], [[27, 270, 270, 270], [270, 270, 270, 270], 1, nn.Sigmoid()],
+                 [[27, 50, 80, 80, 40], [50, 80, 80, 40, 40], 1, nn.ReLU()]]
+    for args in modelArgs:
+        model = SimpleClassifier(*args)
+        optimizer = torch.optim.SGD(model.parameters(), lr = 0.001)
+        model.to(device)
+        lossCalc = nn.L1Loss()
+        model.train()
+        for epoch in range(200):
+            for data_inputs, data_labels in trainDataLoader:
+                optimizer.zero_grad()
+                data_inputs = data_inputs.to(device)
+                data_labels = data_labels.to(device)
+                preds = model(data_inputs)
+                preds = preds.squeeze(dim=1)
+                loss = lossCalc(preds, data_labels)
+                loss.backward()
+                optimizer.step()
+            print(f"Epoch: {epoch}, loss: {loss.item():.3}")
 
-    # Test model
-    model.eval()
-    with torch.no_grad():
-        preds = model(torch.from_numpy(X_validate_norm).to(device))
-        meanError = mae(torch.from_numpy(y_validate.values).to("cpu"), preds.to("cpu"))
-    print(f"Error of the model: {meanError}")
-    predsArray = preds.to("cpu").numpy()
-    predsArray = predsArray.reshape((predsArray.shape[0], ))
-    transform_func(predsArray)
-    predsList = list(predsArray)
-    trueLabels = y_validate.values
-    transform_func(trueLabels)
-    trueList = list(trueLabels)
-    true_preds = (predsArray == trueLabels).sum()
-    num_preds = len(trueLabels)
-    acc = true_preds / num_preds
-    print(f"Accuracy of the model: {100.0*acc:4.2f}%")
-    # # Calculate predictions on test data
-    # with torch.no_grad():
-    #     preds = model(torch.from_numpy(X_evaluate).to(device))
-    # predsArray = preds.to("cpu").numpy()
+        # Test model
+        model.eval()
+        with torch.no_grad():
+            preds = model(torch.from_numpy(X_validate_norm).to(device))
+            meanError = mae(torch.from_numpy(y_validate.values).to("cpu"), preds.to("cpu"))
+        print(f"Error of the model: {meanError}")
+        predsArray = preds.to("cpu").numpy()
+        predsArray = predsArray.reshape((predsArray.shape[0], ))
+        transform_func(predsArray)
+        trueLabels = deepcopy(y_validate.values)
+        transform_func(trueLabels)
+        accuracy = accuracy_score(trueLabels, predsArray)
+        precisions = precision_score(trueLabels, predsArray, labels=[0, 1, 2], average=None)
+        saveToFile("structureTests.txt", f'Struktura sieci: {args} Całkowita dokładność: {100*accuracy:4.2f}% precyzje dla klas 0, 1 i 2: {precisions}\n', toAppend=True)
+        # # Calculate predictions on test data
+        # with torch.no_grad():
+        #     preds = model(torch.from_numpy(X_evaluate).to(device))
+        # predsArray = preds.to("cpu").numpy()
 
-    # # Save predictions
-    # np.savetxt('predictions.csv', predsArray, delimiter=',', fmt="%f", header='', comments='')
+        # # Save predictions
+        # np.savetxt('predictions.csv', predsArray, delimiter=',', fmt="%f", header='', comments='')
 
 
 def mae(y_true,y_pred):
