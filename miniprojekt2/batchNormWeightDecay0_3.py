@@ -15,6 +15,7 @@ class SimpleClassifier(nn.Module):
         self._layers = nn.Sequential()
         for inputs, neurons in zip(inputsList, neuronsList):
             self._layers.append(nn.Linear(inputs, neurons, dtype=torch.float64))
+            self._layers.append(nn.BatchNorm1d(neurons, dtype=torch.float64))
             self._layers.append(activationFunc)
         self._layers.append(nn.Linear(neuronsList[-1], outputs, dtype=torch.float64))
 
@@ -50,7 +51,7 @@ def split_data(df: pd.DataFrame, y_col: str) -> tuple:
 def load_data(X: np.ndarray, y: np.ndarray) -> tuple:
     Y = torch.from_numpy(y.values)
     Y = Y.double()
-    trainDataset = data.TensorDataset(torch.from_numpy(X),Y)
+    trainDataset = data.TensorDataset(torch.from_numpy(X), Y)
     dataloader = data.DataLoader(trainDataset, batch_size=32, shuffle=True)
     return dataloader
 
@@ -72,7 +73,7 @@ def saveToFile(filename: str, text: str, toAppend: bool):
         plik.write(text)
 
 def main():
-    saveToFile("structureTests.txt", f'', toAppend=False)
+    saveToFile("structureTestsBatchNormWeightDecay0_3.txt", f'', toAppend=False)
     # prepare cuda
     device = torch.device("cuda")
     prepare_cuda()
@@ -89,6 +90,7 @@ def main():
 
     X_train, y_train, X_validate, y_validate, X_test, y_test = split_data(df_train, y_col="SalePrice")
 
+
     X_train_norm = deepcopy(X_train)
     X_validate_norm = deepcopy(X_validate)
     X_evaluate = deepcopy(df_test)
@@ -100,6 +102,7 @@ def main():
     X_train_norm = X_train_norm.values
     X_validate_norm = X_validate_norm.values
     X_evaluate = X_evaluate.values
+
 
     trainDataLoader = load_data(X_train_norm, y_train)
     validateDataLoader = load_data(X_validate_norm, y_validate)
@@ -114,7 +117,7 @@ def main():
     epochs = [200, 200, 200, 300, 300, 300, 600, 600, 600, 700]
     for args, nEpochs in zip(modelArgs, epochs):
         model = SimpleClassifier(*args)
-        optimizer = torch.optim.SGD(model.parameters(), lr = 0.001)
+        optimizer = torch.optim.SGD(model.parameters(), lr = 0.001, weight_decay=0.3)
         model.to(device)
         lossCalc = nn.L1Loss()
         model.train()
@@ -153,7 +156,7 @@ def main():
         precisions = precision_score(trueLabels, predsArray, labels=[0, 1, 2], average=None)
         trainAccuracy = accuracy_score(trueTrainLabels, predsTrainArray)
         trainPrecisions = precision_score(trueTrainLabels, predsTrainArray, labels=[0, 1, 2], average=None)
-        saveToFile("structureTests.txt", f'Struktura sieci: {args} Całkowita dokładność (walidacyjny): {100*accuracy:4.2f}% precyzje dla klas 0, 1 i 2 (walidacyjny): {precisions} Całkowita dokładność (treningowy): {100*trainAccuracy:4.2f}% precyzje dla klas 0, 1 i 2 (treningowy): {trainPrecisions} Obciążenie: {abs(100 - 100*trainAccuracy):4.2f} Wariancja: {100*abs(trainAccuracy-accuracy):4.2f}\n', toAppend=True)
+        saveToFile("structureTestsBatchNormWeightDecay0_3.txt", f'Struktura sieci: {args} Całkowita dokładność (walidacyjny): {100*accuracy:4.2f}% precyzje dla klas 0, 1 i 2 (walidacyjny): {precisions} Całkowita dokładność (treningowy): {100*trainAccuracy:4.2f}% precyzje dla klas 0, 1 i 2 (treningowy): {trainPrecisions} Obciążenie: {abs(100 - 100*trainAccuracy):4.2f} Wariancja: {100*abs(trainAccuracy-accuracy):4.2f}\n', toAppend=True)
         # # Calculate predictions on test data
         # with torch.no_grad():
         #     preds = model(torch.from_numpy(X_evaluate).to(device))
