@@ -16,7 +16,6 @@ TEST_PATH = "pakiet/test_data.csv"
 
 
 class SimpleClassifier(nn.Module):
-
     def __init__(self, inputsList: list[int], neuronsList: list[int], outputs: int, activationFunc: nn.Module = nn.ReLU()):
         super().__init__()
         self._layers = nn.Sequential()
