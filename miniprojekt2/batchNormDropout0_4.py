@@ -53,7 +53,7 @@ def load_data(X: np.ndarray, y: np.ndarray) -> tuple:
     Y = torch.from_numpy(y.values)
     Y = Y.double()
     trainDataset = data.TensorDataset(torch.from_numpy(X), Y)
-    dataloader = data.DataLoader(trainDataset, batch_size=32, shuffle=True)
+    dataloader = data.DataLoader(trainDataset, batch_size=64, shuffle=True)
     return dataloader
 
 
@@ -86,7 +86,6 @@ def main():
     categorical = ["HallwayType", "HeatingType", "AptManageType", "TimeToBusStop", "TimeToSubway", "SubwayStation"]
     df_train = encode_categorical(df_train, categorical)
     df_test = encode_categorical(df_test, categorical)
-
 
 
     X_train, y_train, X_validate, y_validate, X_test, y_test = split_data(df_train, y_col="SalePrice")
