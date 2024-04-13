@@ -7,6 +7,7 @@ import torch.optim as optim
 import pandas as pd
 import numpy as np
 import torch.nn.functional as F
+import kornia
 
 
 TRAIN_PATH = "./data/train/"
@@ -25,7 +26,8 @@ class ConvParams(NamedTuple):
     out_channels: int
     conv_kernel_size: int
     stride: int = 1
-    padding: int = 0
+    padding: int = 2
+    pool: bool = True
     pool_kernel_size: int = 2
     pool_stride: int = 2
 
@@ -40,7 +42,8 @@ class ConvNet(nn.Module):
             self.convolutional_layers.append(nn.Conv2d(in_channels=layer.in_channels, out_channels=layer.out_channels, kernel_size=layer.conv_kernel_size, padding=layer.padding))
             self.convolutional_layers.append(nn.BatchNorm2d(layer.out_channels))
             self.convolutional_layers.append(nn.ReLU())
-            self.convolutional_layers.append(nn.MaxPool2d(kernel_size=layer.pool_kernel_size, stride=layer.pool_stride))
+            if layer.pool:
+                self.convolutional_layers.append(nn.MaxPool2d(kernel_size=layer.pool_kernel_size, stride=layer.pool_stride))
 
         for layer in linear_layers[:-1]:
             self.linear_layers.append(nn.Dropout(layer.dropout))
@@ -48,6 +51,7 @@ class ConvNet(nn.Module):
             self.linear_layers.append(nn.ReLU())
 
         self.linear_layers.append(nn.Linear(linear_layers[-1].inputs, linear_layers[-1].outputs))
+
 
     def forward(self, x):
         x = self.convolutional_layers(x)
@@ -76,10 +80,22 @@ def main():
     device = torch.device("cuda")
     prepare_cuda()
 
-    train_transform = transforms.Compose([transforms.ToTensor(), transforms.CenterCrop(24), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    test_transform = transforms.Compose([transforms.ToTensor(), transforms.CenterCrop(24), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    # Transforms and augmentation
+    train_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(0.2),
+        transforms.RandomVerticalFlip(0.5),
+        transforms.RandomRotation(24),
+        transforms.ToTensor(),
+        transforms.RandomErasing(0.2),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
 
-    batch_size = 32
+
+    batch_size = 128
     num_workers = 8
     trainset = load_image_dataset(TRAIN_PATH, transform=train_transform)
     validset = load_image_dataset(VALIDATE_PATH, transform=test_transform)
@@ -88,21 +104,26 @@ def main():
     validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-
-    linear_layers = [
-        LinearParams(inputs=144, outputs=100, dropout=0.4),
-        LinearParams(inputs=100, outputs=70, dropout=0.4),
-        LinearParams(inputs=70, outputs=50),
-    ]
+    # Setup model
+    classes = 50
     conv_layers = [
-        ConvParams(in_channels=3, out_channels=6, conv_kernel_size=5),
-        ConvParams(in_channels=6, out_channels=16, conv_kernel_size=5),
+        ConvParams(in_channels=3, out_channels=6, conv_kernel_size=5, stride=1, padding=2, pool_kernel_size=2),
+        ConvParams(in_channels=6, out_channels=16, conv_kernel_size=5, stride=1, padding=2, pool=False),
+        # ConvParams(in_channels=16, out_channels=32, conv_kernel_size=3, stride=1, pool=False),
+        # ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, pool=False)
     ]
-
+    linear_layers = [
+        LinearParams(inputs=16 * 32 * 32, outputs=1024, dropout=0.5),
+        LinearParams(inputs=1024, outputs=512, dropout=0.5),
+        LinearParams(inputs=512, outputs=classes),
+    ]
     model = ConvNet(conv_layers=conv_layers, linear_layers=linear_layers).to(device)
+    # model = ConvNet()
+    print(model)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
-    epochs = 5 # 5 for testing purposes because training very slow for some reason (possibly out of my control)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    epochs = 10
+
 
     model.train()
     for epoch in range(epochs):
@@ -118,11 +139,25 @@ def main():
 
             running_loss += loss.item()
 
-        print('[%d/100] loss: %.3f' %
-            (epoch+1 ,  running_loss / 2000))
+        print(f'[{epoch+1}/{epochs}] loss: {running_loss / 2000:.3f}')
     running_loss = 0.0
 
     # Test model
+    total = 0
+    correct = 0
+    model.eval()
+    with torch.no_grad():
+        for data in trainloader:
+            images, labels = data
+            images = images.to(device)
+            outputs = model(images).cpu()
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print('Accuracy of the network on the train images: %d %%' % (
+        100 * correct / total))
+
     total = 0
     correct = 0
     model.eval()
@@ -137,6 +172,7 @@ def main():
 
     print('Accuracy of the network on the test images: %d %%' % (
         100 * correct / total))
+
 
 
 if __name__ == "__main__":
