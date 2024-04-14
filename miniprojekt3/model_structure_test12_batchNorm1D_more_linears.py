@@ -111,18 +111,18 @@ def main():
     classes = 50
     conv_layers = [
         ConvParams(in_channels=3, out_channels=32, conv_kernel_size=7, stride=1, padding=3, pool_kernel_size=2),
-        ConvParams(in_channels=32, out_channels=64, conv_kernel_size=7, stride=1, padding=3, pool_kernel_size=2),
+        ConvParams(in_channels=32, out_channels=64, conv_kernel_size=7, stride=1, padding=1, pool=False),
         ConvParams(in_channels=64, out_channels=128, conv_kernel_size=5, stride=1, padding=1, pool=False),
         ConvParams(in_channels=128, out_channels=256, conv_kernel_size=5, stride=1, padding=1, pool=False),
-        ConvParams(in_channels=256, out_channels=128, conv_kernel_size=5, stride=1, padding=1, pool=False),
-        ConvParams(in_channels=128, out_channels=64, conv_kernel_size=5, stride=1, padding=1, pool=False),
-        ConvParams(in_channels=64, out_channels=32, conv_kernel_size=3, stride=1, padding=1, pool=False),
-        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=1, pool=False),
-        ConvParams(in_channels=16, out_channels=8, conv_kernel_size=3, stride=1, padding=1, pool=False),
+        ConvParams(in_channels=256, out_channels=128, conv_kernel_size=5, stride=1, padding=1, pool_kernel_size=2),
+        ConvParams(in_channels=128, out_channels=64, conv_kernel_size=5, stride=1, padding=2, pool=False),
+        ConvParams(in_channels=64, out_channels=32, conv_kernel_size=3, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=16, out_channels=8, conv_kernel_size=3, stride=1, padding=0, pool=False),
         ConvParams(in_channels=8, out_channels=8, conv_kernel_size=3, stride=1, padding=1, pool=False),
     ]
     linear_layers = [
-        LinearParams(inputs=8*8*8, outputs=2048, dropout=0.5),
+        LinearParams(inputs=8*5*5, outputs=2048, dropout=0.5),
         LinearParams(inputs=2048, outputs=1024, dropout=0.4),
         LinearParams(inputs=1024, outputs=512, dropout=0.3),
         LinearParams(inputs=512, outputs=256, dropout=0.2),
@@ -133,7 +133,7 @@ def main():
     # model = ConvNet()
     print(model)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.001)
     epochs = 300
 
 

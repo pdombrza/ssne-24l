@@ -113,7 +113,7 @@ def main():
         ConvParams(in_channels=32, out_channels=64, conv_kernel_size=7, stride=1, padding=3, pool=False),
         ConvParams(in_channels=64, out_channels=128, conv_kernel_size=5, stride=1, padding=2, pool=False),
         ConvParams(in_channels=128, out_channels=64, conv_kernel_size=5, stride=1, padding=2, pool=False),
-        ConvParams(in_channels=64, out_channels=64, conv_kernel_size=3, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=64, out_channels=32, conv_kernel_size=3, stride=1, padding=0, pool=False),
         ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False),
     ]
     linear_layers = [

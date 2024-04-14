@@ -115,7 +115,7 @@ def main():
         ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False),
     ]
     linear_layers = [
-        LinearParams(inputs=16*20*20, outputs=1024, dropout=0.5),
+        LinearParams(inputs=16*7*7, outputs=1024, dropout=0.5),
         LinearParams(inputs=1024, outputs=512, dropout=0.5),
         LinearParams(inputs=512, outputs=classes),
     ]
