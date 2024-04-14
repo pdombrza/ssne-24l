@@ -109,13 +109,15 @@ def main():
     # Setup model
     classes = 50
     conv_layers = [
-        ConvParams(in_channels=3, out_channels=6, conv_kernel_size=5, stride=1, padding=2, pool_kernel_size=2),
-        ConvParams(in_channels=6, out_channels=16, conv_kernel_size=5, stride=1, padding=2, pool=False),
-        ConvParams(in_channels=16, out_channels=32, conv_kernel_size=3, stride=1, padding=0, pool=False),
-        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False)
+        ConvParams(in_channels=3, out_channels=32, conv_kernel_size=5, stride=1, padding=3, pool_kernel_size=2),
+        ConvParams(in_channels=32, out_channels=64, conv_kernel_size=5, stride=1, padding=3, pool_kernel_size=2),
+        ConvParams(in_channels=64, out_channels=128, conv_kernel_size=7, stride=1, padding=2, pool=False),
+        ConvParams(in_channels=128, out_channels=64, conv_kernel_size=7, stride=1, padding=2, pool=False),
+        ConvParams(in_channels=64, out_channels=64, conv_kernel_size=3, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False),
     ]
     linear_layers = [
-        LinearParams(inputs=16*28*28, outputs=1024, dropout=0.5),
+        LinearParams(inputs=16*12*12, outputs=1024, dropout=0.5),
         LinearParams(inputs=1024, outputs=512, dropout=0.5),
         LinearParams(inputs=512, outputs=classes),
     ]

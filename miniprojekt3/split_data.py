@@ -21,8 +21,8 @@ def main():
         images = list(os.listdir(os.path.join(train_all_path, subdir)))
         np.random.shuffle(images)
         train_size = round(len(images) * 0.7)
-        valid_size = round(len(images) * 0.15)
-        test_size = round(len(images) * 0.15)
+        valid_size = round(len(images) * 0.2)
+        test_size = round(len(images) * 0.10)
         for i, image in enumerate(images):
             if i < train_size:
                 dest_folder = train_folder

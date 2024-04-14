@@ -46,8 +46,9 @@ class ConvNet(nn.Module):
                 self.convolutional_layers.append(nn.MaxPool2d(kernel_size=layer.pool_kernel_size, stride=layer.pool_stride))
 
         for layer in linear_layers[:-1]:
-            self.linear_layers.append(nn.Dropout(layer.dropout))
             self.linear_layers.append(nn.Linear(layer.inputs, layer.outputs))
+            self.linear_layers.append(nn.Dropout(layer.dropout))
+            self.linear_layers.append(nn.BatchNorm1d(layer.outputs))
             self.linear_layers.append(nn.ReLU())
 
         self.linear_layers.append(nn.Linear(linear_layers[-1].inputs, linear_layers[-1].outputs))
@@ -109,13 +110,17 @@ def main():
     # Setup model
     classes = 50
     conv_layers = [
-        ConvParams(in_channels=3, out_channels=6, conv_kernel_size=5, stride=1, padding=2, pool_kernel_size=2),
-        ConvParams(in_channels=6, out_channels=16, conv_kernel_size=5, stride=1, padding=2, pool=False),
-        ConvParams(in_channels=16, out_channels=32, conv_kernel_size=3, stride=1, padding=0, pool=False),
-        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=3, stride=1, padding=0, pool=False)
+        ConvParams(in_channels=3, out_channels=32, conv_kernel_size=7, stride=1, padding=3, pool_kernel_size=2),
+        ConvParams(in_channels=32, out_channels=64, conv_kernel_size=7, stride=1, padding=3, pool=False),
+        ConvParams(in_channels=64, out_channels=128, conv_kernel_size=5, stride=1, padding=2, pool=False),
+        ConvParams(in_channels=128, out_channels=64, conv_kernel_size=5, stride=1, padding=2, pool=False),
+        ConvParams(in_channels=64, out_channels=32, conv_kernel_size=5, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=32, out_channels=16, conv_kernel_size=5, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=16, out_channels=8, conv_kernel_size=3, stride=1, padding=0, pool=False),
+        ConvParams(in_channels=8, out_channels=8, conv_kernel_size=3, stride=1, padding=0, pool=False),
     ]
     linear_layers = [
-        LinearParams(inputs=16*28*28, outputs=1024, dropout=0.5),
+        LinearParams(inputs=8*20*20, outputs=1024, dropout=0.5),
         LinearParams(inputs=1024, outputs=512, dropout=0.5),
         LinearParams(inputs=512, outputs=classes),
     ]
