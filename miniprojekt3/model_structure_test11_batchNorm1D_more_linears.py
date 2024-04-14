@@ -120,9 +120,11 @@ def main():
         ConvParams(in_channels=8, out_channels=8, conv_kernel_size=3, stride=1, padding=0, pool=False),
     ]
     linear_layers = [
-        LinearParams(inputs=8*10*10, outputs=1024, dropout=0.5),
+        LinearParams(inputs=8*10*10, outputs=2048, dropout=0.5),
+        LinearParams(inputs=2048, outputs=1024, dropout=0.5),
         LinearParams(inputs=1024, outputs=512, dropout=0.5),
-        LinearParams(inputs=512, outputs=classes),
+        LinearParams(inputs=512, outputs=256, dropout=0.5),
+        LinearParams(inputs=256, outputs=classes),
     ]
     model = ConvNet(conv_layers=conv_layers, linear_layers=linear_layers).to(device)
     # model = ConvNet()
