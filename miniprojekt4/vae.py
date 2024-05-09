@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torch.optim as optim
-import pandas as pd
 import numpy as np
+from scipy import linalg
 from matplotlib import pyplot as plt
 
 
@@ -80,25 +80,87 @@ def prepare_cuda() -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def visualise_reconstructions(model, input_images, device):
-    # Reconstruct images
+def generate_reconstructions(model, input_images, device):
     model.eval()
     with torch.no_grad():
         reconst_imgs, means, log_var = model(input_images.to(device))
     reconst_imgs = reconst_imgs.cpu()
+    return reconst_imgs
 
-    # Plotting
-    imgs = torch.stack([input_images, reconst_imgs], dim=1).flatten(0,1)
-    grid = torchvision.utils.make_grid(imgs, nrow=4, normalize=False, value_range=(-1,1))
+
+def generate_random_images(model, n_imgs, device):
+    # Generate images
+    model.eval()
+    with torch.no_grad():
+        generated_imgs = model.decoder(torch.randn([n_imgs, model.latent_dim]).to(device))
+    generated_imgs = generated_imgs.cpu()
+    return generated_imgs
+
+
+
+def visualize_images(input_images, generated_images, reconstruct=True):
+    title = "Generations"
+    grid = torchvision.utils.make_grid(generated_images, nrow=4, normalize=False, value_range=(-1,1))
+    if reconstruct:
+        imgs = torch.stack([input_images, generated_images], dim=1).flatten(0,1)
+        title = "Reconstructions"
+        grid = torchvision.utils.make_grid(imgs, nrow=4, normalize=False, value_range=(-1,1))
     grid = grid.permute(1, 2, 0)
     if len(input_images) == 4:
         plt.figure(figsize=(10,10))
     else:
         plt.figure(figsize=(15,10))
-    plt.title(f"Reconstructions")
+    plt.title(title)
     plt.imshow(grid)
     plt.axis('off')
     plt.show()
+
+
+def calculate_frechet_distance(distribution_1, distribution_2, eps=1e-6):
+    mu1 = np.mean(distribution_1, axis=0)
+    sigma1 = np.cov(distribution_1, rowvar=False)
+
+    mu2 = np.mean(distribution_2, axis=0)
+    sigma2 = np.cov(distribution_2, rowvar=False)
+
+    mu1 = np.atleast_1d(mu1)
+    mu2 = np.atleast_1d(mu2)
+
+    sigma1 = np.atleast_2d(sigma1)
+    sigma2 = np.atleast_2d(sigma2)
+
+    assert mu1.shape == mu2.shape, \
+        'Training and test mean vectors have different lengths'
+    assert sigma1.shape == sigma2.shape, \
+        'Training and test covariances have different dimensions'
+
+    diff = mu1 - mu2
+
+    # Product might be almost singular
+    covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+    if not np.isfinite(covmean).all():
+        msg = ('fid calculation produces singular product; '
+               'adding %s to diagonal of cov estimates') % eps
+        print(msg)
+        offset = np.eye(sigma1.shape[0]) * eps
+        covmean = linalg.sqrtm((sigma1 + offset).dot(sigma2 + offset))
+
+    # Numerical error might give slight imaginary component
+    if np.iscomplexobj(covmean):
+        if not np.allclose(np.diagonal(covmean).imag, 0, atol=1e-3):
+            m = np.max(np.abs(covmean.imag))
+            raise ValueError('Imaginary component {}'.format(m))
+        covmean = covmean.real
+
+    tr_covmean = np.trace(covmean)
+
+    return (diff.dot(diff) + np.trace(sigma1) +
+            np.trace(sigma2) - 2 * tr_covmean)
+
+
+def get_frechnet_distance(original_dist, gen_func, *args, **kwargs):
+    generations = gen_func(*args, **kwargs)
+    return calculate_frechet_distance(generations.numpy(), original_dist.numpy())
 
 
 def get_train_images(num, test_set):
@@ -130,7 +192,7 @@ def main():
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
 
     # train
-    num_epochs = 30
+    num_epochs = 3
     for n in range(num_epochs):
         losses_epoch = []
         for x, y in iter(trainloader):
@@ -151,7 +213,12 @@ def main():
 
     # Reconstruct
     input_images = get_train_images(8, test_set=test)
-    visualise_reconstructions(vae, input_images, device)
+    reconst_images = generate_reconstructions(vae, input_images, device)
+    visualize_images(input_images, reconst_images)
+
+    # Generate
+    gen_images = generate_random_images(vae, 16, device)
+    visualize_images(input_images, gen_images, reconstruct=False)
 
 
 if __name__ == "__main__":
