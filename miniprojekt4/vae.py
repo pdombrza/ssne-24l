@@ -9,6 +9,7 @@ import torch.optim as optim
 import numpy as np
 from scipy import linalg
 from matplotlib import pyplot as plt
+from evaluator import train_evaluator
 
 
 class Encoder(nn.Module):
@@ -16,8 +17,11 @@ class Encoder(nn.Module):
         super().__init__()
         self.fc_1 = nn.Linear(input_dim, hidden_dim)
         self.fc_2 = nn.Linear(hidden_dim, hidden_dim)
+        # self.conv1 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
+        # self.conv2 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
+        # self.conv3 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
         self.fc_mean = nn.Linear(hidden_dim, latent_dim)
-        self.fc_var = nn.Linear (hidden_dim, latent_dim)
+        self.fc_var = nn.Linear(hidden_dim, latent_dim)
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
 
@@ -97,14 +101,28 @@ def generate_random_images(model, n_imgs, device):
     return generated_imgs
 
 
+def get_test_images(test_set, number):
+    orig_data = [x[0] for x in list(test_set)[:number]]
+    orig_data = torch.stack(orig_data)
+    return orig_data
+
+
+
+def get_distribution(images, evaluator, device):
+    with torch.no_grad():
+        dist = evaluator.get_features(images.to(device)).cpu()
+    return dist
+
+
 
 def visualize_images(input_images, generated_images, reconstruct=True):
-    title = "Generations"
-    grid = torchvision.utils.make_grid(generated_images, nrow=4, normalize=False, value_range=(-1,1))
     if reconstruct:
         imgs = torch.stack([input_images, generated_images], dim=1).flatten(0,1)
         title = "Reconstructions"
         grid = torchvision.utils.make_grid(imgs, nrow=4, normalize=False, value_range=(-1,1))
+    else:
+        title = "Generations"
+        grid = torchvision.utils.make_grid(generated_images, nrow=4, normalize=False, value_range=(-1,1))
     grid = grid.permute(1, 2, 0)
     if len(input_images) == 4:
         plt.figure(figsize=(10,10))
@@ -158,13 +176,15 @@ def calculate_frechet_distance(distribution_1, distribution_2, eps=1e-6):
             np.trace(sigma2) - 2 * tr_covmean)
 
 
-def get_frechnet_distance(original_dist, gen_func, *args, **kwargs):
-    generations = gen_func(*args, **kwargs)
-    return calculate_frechet_distance(generations.numpy(), original_dist.numpy())
-
-
 def get_train_images(num, test_set):
     return torch.stack([test_set[i][0] for i in range(10,10+num)], dim=0)
+
+
+def vae_loss(x, x_hat, mean, log_var):
+    reproduction_loss = nn.functional.mse_loss(x_hat, x, reduction='sum')
+    KLD      = -0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
+
+    return reproduction_loss + KLD
 
 
 def main():
@@ -184,6 +204,7 @@ def main():
     train, test = torch.utils.data.random_split(dataset, [0.8, 0.2])
     trainloader = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True)
     testloader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
+    class_amount = len(dataset.classes)
 
     # prep model
     vae =  VAE(latent_dim=128, hidden_dim=1024, x_dim=3072).to(device)
@@ -191,14 +212,14 @@ def main():
     optimizer = optim.Adam(vae.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
 
-    # train
+    train
     num_epochs = 3
     for n in range(num_epochs):
         losses_epoch = []
         for x, y in iter(trainloader):
             x = x.to(device)
             out, means, log_var = vae(x)
-            loss = criterion(out, x)
+            loss = vae_loss(x, out, means, log_var)
             losses_epoch.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -211,14 +232,25 @@ def main():
         print(f"Epoch {n} loss {np.mean(np.array(losses_epoch))}, test L1 = {np.mean(L1_list)}")
         scheduler.step()
 
+    number = 1000
+    test_images = get_test_images(test, number)
+
     # Reconstruct
-    input_images = get_train_images(8, test_set=test)
+    input_images = get_train_images(number, test_set=test)
+    evaluator = train_evaluator(trainloader, 5, class_amount, device, 3*32*32, 256)
     reconst_images = generate_reconstructions(vae, input_images, device)
-    visualize_images(input_images, reconst_images)
+    # visualize_images(input_images, reconst_images)
+    reconst_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(reconst_images, evaluator, device).numpy())
+    print(f"Reconstruction fid: {reconst_distance}")
 
     # Generate
-    gen_images = generate_random_images(vae, 16, device)
-    visualize_images(input_images, gen_images, reconstruct=False)
+    gen_images = generate_random_images(vae, number, device)
+    # visualize_images(input_images, gen_images, reconstruct=False)
+    gen_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(gen_images, evaluator, device).numpy())
+    print(f"Generation fid: {gen_distance}")
+
+
+
 
 
 if __name__ == "__main__":
