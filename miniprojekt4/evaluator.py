@@ -51,6 +51,26 @@ def train_evaluator(dataloader, num_epochs, class_amount, device, eval_input_dim
         print(f"Evaluator epoch {epoch+1}, loss: {total_loss}")
     return evaluator
 
+def eval_evaluator(dataloader, evaluator, device):
+    num_correct = 0
+    total_guesses = 0
+
+    evaluator.eval()
+    with torch.no_grad():
+        for data, targets in iter(dataloader):
+            # Sends data and targets to device
+            data = data.to(device)
+            targets = targets.to(device)
+
+            # Acquires the network's best guesses at each class
+            results = evaluator(data)
+            best_guesses = torch.argmax(results, 1)
+
+            # Updates number of correct and total guesses
+            num_correct += torch.eq(targets, best_guesses).sum().item()
+            total_guesses += len(targets)
+    return num_correct/total_guesses*100
+
 
 def calculate_frechet_distance(distribution_1, distribution_2, eps=1e-6):
     mu1 = np.mean(distribution_1, axis=0)
