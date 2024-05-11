@@ -136,7 +136,7 @@ def main():
 
     G_losses = []
     D_losses = []
-    num_epochs = 10
+    num_epochs = 30
     for epoch in range(num_epochs):
         # For each batch in the dataloader
         discriminator_fake_acc = []
@@ -200,16 +200,16 @@ def main():
         print(f"Epoch: {epoch}, discriminator fake error: {np.mean(discriminator_fake_acc):.3}, discriminator real acc: {np.mean(discriminator_real_acc):.3}")
         generator_scheduler.step()
         discriminator_scheduler.step()
-        if epoch % 10 == 0:
-            with torch.no_grad():
-                fake = generator(fixed_noise).detach().cpu()
-            grid = torchvision.utils.make_grid(fake)
-            grid = grid.permute(1, 2, 0)
-            plt.figure(figsize=(10,10))
-            plt.title(f"Generations")
-            plt.imshow(grid)
-            plt.axis('off')
-            plt.show()
+        # if epoch % 10 == 0:
+        #     with torch.no_grad():
+        #         fake = generator(fixed_noise).detach().cpu()
+        #     grid = torchvision.utils.make_grid(fake)
+        #     grid = grid.permute(1, 2, 0)
+        #     plt.figure(figsize=(10,10))
+        #     plt.title(f"Generations")
+        #     plt.imshow(grid)
+        #     plt.axis('off')
+        #     plt.show()
     number = 1000
     test_images = get_test_images(test, number)
 
@@ -224,7 +224,6 @@ def main():
 
     # Generate
     gen_images = generate_random_images(generator, 32, number, device)
-    print(gen_images.size())
     # visualize_images(input_images, gen_images, reconstruct=False)
     gen_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(gen_images, evaluator, device).numpy())
     print(f"Generation fid: {gen_distance}")
@@ -234,6 +233,13 @@ def main():
                                                      std = [ 1., 1., 1. ]),
                                ])
     inv_gen_images = invTrans(gen_images)
+    grid = torchvision.utils.make_grid(inv_gen_images)
+    grid = grid.permute(1, 2, 0)
+    plt.figure(figsize=(50,50))
+    plt.title(f"Generations")
+    plt.imshow(grid)
+    plt.axis('off')
+    plt.show()
     torch.save(inv_gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus.pt")
 
 if __name__ == "__main__":
