@@ -2,7 +2,9 @@ __pycache__
 *.pyc
 .vscode
 
-data
+miniprojekt3/data/*
+miniprojekt3/test_all/*
+miniprojekt3/train/*
 lab1
 lab3
 
