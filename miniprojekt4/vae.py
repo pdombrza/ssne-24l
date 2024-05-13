@@ -189,7 +189,7 @@ def main():
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
 
     # train
-    num_epochs = 3
+    num_epochs = 80
     vae = train_model(vae, optimizer, scheduler, trainloader, testloader, num_epochs, device)
 
     number = 1000
@@ -210,7 +210,9 @@ def main():
     visualize_images(input_images[:16], gen_images[:16], reconstruct=False)
     gen_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(gen_images, evaluator, device).numpy())
     print(f"Generation fid: {gen_distance}")
-    torch.save(gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus.pt")
+    print(f"Shape: {gen_images.shape}")
+    torch.save(vae.cpu(), "cvae_model")
+    torch.save(gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus2.pt")
 
 
 
