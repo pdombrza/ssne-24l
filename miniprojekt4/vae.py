@@ -9,6 +9,10 @@ import torch.optim as optim
 import numpy as np
 from matplotlib import pyplot as plt
 from evaluator import train_evaluator, calculate_frechet_distance, get_distribution
+from vae_more_layers import ExtendedVAE
+from vae_more_layers2 import ExtendedVAE2
+from cvae import ConvVae
+
 
 
 class Encoder(nn.Module):
@@ -16,9 +20,6 @@ class Encoder(nn.Module):
         super().__init__()
         self.fc_1 = nn.Linear(input_dim, hidden_dim)
         self.fc_2 = nn.Linear(hidden_dim, hidden_dim)
-        # self.conv1 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
-        # self.conv2 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
-        # self.conv3 = nn.Conv2d(3, 32, 5, stride=2, padding=1)
         self.fc_mean = nn.Linear(hidden_dim, latent_dim)
         self.fc_var = nn.Linear(hidden_dim, latent_dim)
 
@@ -137,6 +138,27 @@ def vae_loss(x, x_hat, mean, log_var):
     return reproduction_loss + KLD
 
 
+def train_model(model, optimizer, scheduler, trainloader, testloader, num_epochs, device):
+    for n in range(num_epochs):
+        losses_epoch = []
+        for x, y in iter(trainloader):
+            x = x.to(device)
+            out, means, log_var = model(x)
+            loss = vae_loss(x, out, means, log_var)
+            losses_epoch.append(loss.item())
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        L1_list = []
+        for x, _ in iter(testloader):
+            x  = x.to(device)
+            out, _, _ = model(x)
+            L1_list.append(torch.mean(torch.abs(out-x)).item())
+        print(f"Epoch {n} loss {np.mean(np.array(losses_epoch))}, test L1 = {np.mean(L1_list)}")
+        scheduler.step()
+    return model
+
+
 def main():
     device = torch.device("cuda")
     prepare_cuda()
@@ -144,6 +166,7 @@ def main():
 
     transform = transforms.Compose(
         [
+            transforms.RandomHorizontalFlip(0.5),
             transforms.ToTensor(),
         ]
     )
@@ -157,30 +180,17 @@ def main():
     class_amount = len(dataset.classes)
 
     # prep model
-    vae =  VAE(latent_dim=128, hidden_dim=1024, x_dim=3072).to(device)
+    # vae = VAE(latent_dim=128, hidden_dim=1024, x_dim=3072).to(device)
+    # vae = ExtendedVAE(latent_dim=256, x_dim=3072).to(device)
+    vae = ExtendedVAE2(latent_dim=256, x_dim=3072).to(device)
+    vae = ConvVae(latent_dim=256).to(device)
     criterion = nn.MSELoss(reduction="sum")
     optimizer = optim.Adam(vae.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
 
-    train
+    # train
     num_epochs = 3
-    for n in range(num_epochs):
-        losses_epoch = []
-        for x, y in iter(trainloader):
-            x = x.to(device)
-            out, means, log_var = vae(x)
-            loss = vae_loss(x, out, means, log_var)
-            losses_epoch.append(loss.item())
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        L1_list = []
-        for x, _ in iter(testloader):
-            x  = x.to(device)
-            out, _, _ = vae(x)
-            L1_list.append(torch.mean(torch.abs(out-x)).item())
-        print(f"Epoch {n} loss {np.mean(np.array(losses_epoch))}, test L1 = {np.mean(L1_list)}")
-        scheduler.step()
+    vae = train_model(vae, optimizer, scheduler, trainloader, testloader, num_epochs, device)
 
     number = 1000
     test_images = get_test_images(test, number)
@@ -188,16 +198,19 @@ def main():
     # Reconstruct
     input_images = get_train_images(number, test_set=test)
     evaluator = train_evaluator(trainloader, 5, class_amount, device, 3*32*32, 256)
-    reconst_images = generate_reconstructions(vae, input_images, device)
-    # visualize_images(input_images, reconst_images)
-    reconst_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(reconst_images, evaluator, device).numpy())
+    input_to_visualize = input_images[:16]
+    reconst_images_fid = generate_reconstructions(vae, input_images, device)
+    reconst_images_visualize = generate_reconstructions(vae, input_to_visualize, device)
+    visualize_images(input_to_visualize, reconst_images_visualize)
+    reconst_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(reconst_images_fid, evaluator, device).numpy())
     print(f"Reconstruction fid: {reconst_distance}")
 
     # Generate
     gen_images = generate_random_images(vae, number, device)
-    # visualize_images(input_images, gen_images, reconstruct=False)
+    visualize_images(input_images[:16], gen_images[:16], reconstruct=False)
     gen_distance = calculate_frechet_distance(get_distribution(test_images, evaluator, device).numpy(), get_distribution(gen_images, evaluator, device).numpy())
     print(f"Generation fid: {gen_distance}")
+    torch.save(gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus.pt")
 
 
 
