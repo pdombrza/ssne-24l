@@ -106,7 +106,7 @@ def main():
 
     G_losses = []
     D_losses = []
-    num_epochs = 500
+    num_epochs = 650
     for epoch in range(num_epochs):
         discriminator_fake_acc = []
         discriminator_real_acc = []
