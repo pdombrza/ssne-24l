@@ -182,7 +182,7 @@ def main():
     # prep model
     # vae = VAE(latent_dim=128, hidden_dim=1024, x_dim=3072).to(device)
     # vae = ExtendedVAE(latent_dim=256, x_dim=3072).to(device)
-    vae = ExtendedVAE2(latent_dim=256, x_dim=3072).to(device)
+    # vae = ExtendedVAE2(latent_dim=256, x_dim=3072).to(device)
     vae = ConvVae(latent_dim=256).to(device)
     criterion = nn.MSELoss(reduction="sum")
     optimizer = optim.Adam(vae.parameters(), lr=0.001)
@@ -212,7 +212,7 @@ def main():
     print(f"Generation fid: {gen_distance}")
     print(f"Shape: {gen_images.shape}")
     torch.save(vae.cpu(), "cvae_model")
-    torch.save(gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus2.pt")
+    torch.save(gen_images.cpu().detach(),"piatek_Dombrzalski_Kiełbus.pt")
 
 
 
