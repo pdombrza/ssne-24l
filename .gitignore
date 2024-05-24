@@ -11,6 +11,7 @@ lab3
 
 *.zip
 *.txt
+*.pkl
 
 trafic_32
 cvae_model
