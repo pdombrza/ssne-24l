@@ -7,6 +7,7 @@ import torch.optim as optim
 import numpy as np
 
 from functools import partial
+from collections import Counter
 import pickle
 
 
@@ -47,6 +48,7 @@ def load_data(path):
         data = pickle.load(fh)
     return data
 
+
 def prepare_cuda():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
@@ -54,6 +56,19 @@ def prepare_cuda():
 
     torch.backends.cudnn.determinstic = True
     torch.backends.cudnn.benchmark = False
+
+
+# def calculate_class_weights(trainset, class_counts):
+#     labels = [l.item() for _, l in trainset]
+#     total_samples = sum(class_counts.values())
+#     class_weights = {class_id: total_samples/class_count for class_id, class_count in class_counts.items()}
+#     sample_weights = [class_weights[label] for label in labels]
+#     return torch.tensor(sample_weights, dtype=torch.float32)
+
+
+def calculate_class_weights(class_counts):
+    class_weights = torch.tensor([1 / class_count for class_count in class_counts.values()])
+    return class_weights
 
 
 def pad_collate(batch, pad_value):
@@ -87,8 +102,8 @@ def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader,
                     valid_x, valid_targets, valid_len_x = valid_x.to(device), valid_targets.to(device), torch.tensor(valid_len_x).to(device)
                     valid_hidden, valid_state = lstm.init_hidden(valid_x.size(0))
                     valid_hidden, valid_state = valid_hidden.to(device), valid_state.to(device)
-                    preds, _ = lstm(valid_x, valid_len_x, (valid_hidden, valid_state))
-                    valid_acc += (torch.argmax(preds, dim=1) == targets).sum().item() / len(valid_targets)
+                    valid_preds, _ = lstm(valid_x, valid_len_x, (valid_hidden, valid_state))
+                    valid_acc += (torch.argmax(valid_preds, dim=1) == valid_targets).sum().item() / len(valid_targets)
                     batch_count += 1
             print(f"Epoch: {epoch}, loss: {np.mean(np.array(losses_epoch)):.4}, valid acc: {valid_acc/batch_count:.4}")
         scheduler.step()
@@ -100,10 +115,15 @@ def main():
     train = load_data("train.pkl")
     prepare_cuda()
 
+    classes = [label for _, label in train]
+    class_counts = dict(Counter(classes))
+    class_weights = calculate_class_weights(class_counts).to(device)
+
     train_dataset = SequenceDataset(train)
     train_size = int(0.8 * len(train_dataset))
     valid_size = len(train_dataset) - train_size
     train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
+
 
     batch_size = 32
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True)
@@ -113,8 +133,8 @@ def main():
     lstm = LSTMClassifier(1, 25, 1, num_classes).to(device)
     optimizer = optim.Adam(lstm.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
-    loss_fun = nn.CrossEntropyLoss()
-    num_epochs = 30
+    loss_fun = nn.CrossEntropyLoss(weight=class_weights)
+    num_epochs = 150
 
     lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
 
