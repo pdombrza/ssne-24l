@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from functools import partial
-from collections import Counter
 import pickle
 
 
@@ -49,7 +48,6 @@ def load_data(path):
         data = pickle.load(fh)
     return data
 
-
 def prepare_cuda():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
@@ -57,19 +55,6 @@ def prepare_cuda():
 
     torch.backends.cudnn.determinstic = True
     torch.backends.cudnn.benchmark = False
-
-
-# def calculate_class_weights(trainset, class_counts):
-#     labels = [l.item() for _, l in trainset]
-#     total_samples = sum(class_counts.values())
-#     class_weights = {class_id: total_samples/class_count for class_id, class_count in class_counts.items()}
-#     sample_weights = [class_weights[label] for label in labels]
-#     return torch.tensor(sample_weights, dtype=torch.float32)
-
-
-def calculate_class_weights(class_counts):
-    class_weights = torch.tensor([1 / class_count for class_count in class_counts.values()])
-    return class_weights
 
 
 def pad_collate(batch, pad_value):
@@ -123,27 +108,22 @@ def main():
     # size = test.size()
     prepare_cuda()
 
-    classes = [label for _, label in train]
-    class_counts = dict(Counter(classes))
-    class_weights = calculate_class_weights(class_counts).to(device)
-
     train_dataset = SequenceDataset(train)
     train_size = int(0.8 * len(train_dataset))
     valid_size = len(train_dataset) - train_size
     train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
 
-
     batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
     num_classes = 5
-    lstm = LSTMClassifier(1, 25, 1, num_classes).to(device)
+    lstm = LSTMClassifier(1, 175, 2, num_classes).to(device)
     optimizer = optim.Adam(lstm.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
-    loss_fun = nn.CrossEntropyLoss(weight=class_weights)
-    num_epochs = 150
+    loss_fun = nn.CrossEntropyLoss()
+    num_epochs = 100
 
     lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
 
@@ -164,7 +144,7 @@ def main():
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
     dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
-
+    
 
 
 
