@@ -114,12 +114,12 @@ def main():
     train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
 
     batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
     num_classes = 5
-    lstm = LSTMClassifier(1, 200, 7, num_classes).to(device)
+    lstm = LSTMClassifier(1, 200, 2, num_classes).to(device)
     optimizer = optim.Adam(lstm.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
     loss_fun = nn.CrossEntropyLoss()

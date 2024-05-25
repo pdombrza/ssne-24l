@@ -28,18 +28,20 @@ class LSTMClassifier(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True)
+        self._batchNorm = nn.BatchNorm1d(hidden_size*2)
+        self.fc = nn.Linear(hidden_size*2, num_classes)
 
     def init_hidden(self, batch_size):
-        hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        state = torch.zeros(self.num_layers, batch_size, self.hidden_size)
+        hidden = torch.zeros(self.num_layers*2, batch_size, self.hidden_size)
+        state = torch.zeros(self.num_layers*2, batch_size, self.hidden_size)
         return hidden, state
 
     def forward(self, x, len_x, hidden):
         all_outputs, hidden = self.lstm(x, hidden)
         out = all_outputs[torch.arange(all_outputs.size(0)), len_x]
-        x = self.fc(out)
+        x = self._batchNorm(out)
+        x = self.fc(x)
         return x, hidden
 
 
@@ -114,12 +116,12 @@ def main():
     train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
 
     batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
     num_classes = 5
-    lstm = LSTMClassifier(1, 125, 3, num_classes).to(device)
+    lstm = LSTMClassifier(1, 100, 1, num_classes).to(device)
     optimizer = optim.Adam(lstm.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
     loss_fun = nn.CrossEntropyLoss()
@@ -131,15 +133,24 @@ def main():
     with torch.no_grad():
         # test_data = test
         # test_data_len = torch.tensor(len(test_data))
-        for iterator in range(1, len(test) + 1, 1):
-            test_data, test_data_len = torch.tensor(test[iterator - 1:iterator], dtype=torch.float32, device=device, pin_memory=True).unsqueeze(2), torch.tensor(len(test[0]) - 1).to(device)
-            test_hidden, test_state = lstm.init_hidden(1)
+        for iterator in range(2, len(test) + 2, 2):
+            to_substract = 2
+            if iterator == 1104:
+                iterator = 1103
+                to_substract = 1
+            test_data, test_data_len = torch.tensor(test[iterator - to_substract:iterator], dtype=torch.float32, device=device, pin_memory=True).unsqueeze(2), torch.tensor(len(test[0]) - 1).to(device)
+            if test_data.size(0) == 1:
+                test_data = torch.cat((test_data, test_data), dim = 0)
+            test_hidden, test_state = lstm.init_hidden(2)
             test_hidden, test_state = test_hidden.to(device), test_state.to(device)
             # test_hidden = test_hidden.squeeze(dim = 0)
             # test_state = test_state.squeeze(dim = 0)
             # test_data_size, test_hidden_size, test_state_size = test_data.size(), test_hidden.size(), test_state.size()
             preds_tmp, _ = lstm(test_data, test_data_len, (test_hidden, test_state))
             preds_tmp = torch.argmax(preds_tmp, dim=1)
+            if iterator == 1103:
+                preds_tmp = preds_tmp[0]
+                preds_tmp = preds_tmp.unsqueeze(dim=0)
             preds = torch.cat((preds, preds_tmp.to("cpu")), dim = 0)
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
