@@ -28,7 +28,9 @@ class LSTMClassifier(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=16, kernel_size=3, padding='same')
+        self.relu = nn.ReLU()
+        self.lstm = nn.LSTM(input_size=16, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
         self._batchNorm = nn.BatchNorm1d(hidden_size)
         self.fc = nn.Linear(hidden_size, num_classes)
 
@@ -38,10 +40,14 @@ class LSTMClassifier(nn.Module):
         return hidden, state
 
     def forward(self, x, len_x, hidden):
-        all_outputs, hidden = self.lstm(x, hidden)
+        x = x.permute(0, 2, 1)
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = x.permute(0, 2, 1)
+        all_outputs, hidden = self.lstm(x, hidden//2)
         out = all_outputs[torch.arange(all_outputs.size(0)), len_x]
         x = self._batchNorm(out)
-        x = self.fc(x)
+        x = self.fc(out)
         return x, hidden
 
 
@@ -116,8 +122,8 @@ def main():
     train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
 
     batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=8)
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
     num_classes = 5
@@ -154,7 +160,7 @@ def main():
             preds = torch.cat((preds, preds_tmp.to("cpu")), dim = 0)
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
-    dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
+    # dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
 
 
 if __name__ == "__main__":

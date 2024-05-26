@@ -4,7 +4,7 @@ Mateusz Kiełbus, Paweł Dombrzalski
 
 ### Temat
 
-Tematem zadania było stworzenie rekurencyjnej sieci neuronowej, mającej klasyfikować kompozytora na podstawie
+Tematem zadania było stworzenie rekurencyjnej sieci neuronowej, mającej klasyfikować kompozytora na podstawie sekwencji akordów.
 
 ### Struktura projektu
 
