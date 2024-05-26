@@ -8,7 +8,10 @@ import numpy as np
 import pandas as pd
 
 from functools import partial
+from collections import Counter
 import pickle
+
+from recursion import calculate_class_weights
 
 
 class SequenceDataset(Dataset):
@@ -120,11 +123,15 @@ def main():
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
+    classes = [label for _, label in train]
+    class_counts = dict(Counter(classes))
+    class_weights = calculate_class_weights(class_counts).to(device)
+
     num_classes = 5
     lstm = LSTMClassifier(1, 75, 2, num_classes).to(device)
     optimizer = optim.Adam(lstm.parameters(), lr=0.001, weight_decay=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
-    loss_fun = nn.CrossEntropyLoss()
+    loss_fun = nn.CrossEntropyLoss(weight=class_weights)
     num_epochs = 100
 
     lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
@@ -155,7 +162,7 @@ def main():
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
     dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
-    
+
 
 
 

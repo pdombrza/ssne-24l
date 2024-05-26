@@ -24,24 +24,23 @@ class SequenceDataset(Dataset):
         return seq.unsqueeze(-1), label
 
 
-class LSTMClassifier(nn.Module):
+class GRUClassifier(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.4, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
-        self.softmax = nn.Softmax()
+        self.gru = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.4, bidirectional=True, batch_first=True)
+        self.fc = nn.Linear(hidden_size*2, num_classes)
+        self.softmax = nn.Softmax(dim=0)
 
     def init_hidden(self, batch_size):
-        hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        state = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        return hidden, state
+        hidden = torch.zeros(self.num_layers*2, batch_size, self.hidden_size)
+        return hidden
 
     def forward(self, x, len_x, hidden):
-        all_outputs, hidden = self.lstm(x, hidden)
+        all_outputs, hidden = self.gru(x, hidden)
         out = all_outputs[torch.arange(all_outputs.size(0)), len_x]
-        x = self.fc(out)
+        x = self.softmax(self.fc(out))
         return x, hidden
 
 
@@ -76,14 +75,13 @@ def pad_collate(batch, pad_value):
     return xx_pad, yy, x_lens
 
 
-def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device):
+def train_gru(gru, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device):
     for epoch in range(num_epochs):
         losses_epoch = []
         for x, targets, x_len in train_loader:
             x, targets, x_len = x.to(device), targets.to(device), torch.tensor(x_len).to(device)
-            hidden, state = lstm.init_hidden(x.size(0))
-            hidden, state = hidden.to(device), state.to(device)
-            preds, _ = lstm(x, x_len, (hidden, state))
+            hidden = gru.init_hidden(x.size(0)).to(device)
+            preds, _ = gru(x, x_len, hidden)
             optimizer.zero_grad()
             loss = loss_fun(preds, targets)
             losses_epoch.append(loss.item())
@@ -95,14 +93,13 @@ def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader,
             with torch.no_grad():
                 for valid_x, valid_targets, valid_len_x in valid_loader:
                     valid_x, valid_targets, valid_len_x = valid_x.to(device), valid_targets.to(device), torch.tensor(valid_len_x).to(device)
-                    valid_hidden, valid_state = lstm.init_hidden(valid_x.size(0))
-                    valid_hidden, valid_state = valid_hidden.to(device), valid_state.to(device)
-                    preds, _ = lstm(valid_x, valid_len_x, (valid_hidden, valid_state))
+                    valid_hidden = gru.init_hidden(valid_x.size(0)).to(device)
+                    preds, _ = gru(valid_x, valid_len_x, valid_hidden)
                     valid_acc += (torch.argmax(preds, dim=1) == valid_targets).sum().item() / len(valid_targets)
                     batch_count += 1
             print(f"Epoch: {epoch}, loss: {np.mean(np.array(losses_epoch)):.4}, valid acc: {valid_acc/batch_count:.4}")
         scheduler.step()
-    return lstm
+    return gru
 
 
 def main():
@@ -133,13 +130,13 @@ def main():
     # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
 
     num_classes = 5
-    lstm = LSTMClassifier(1, 68, 2, num_classes).to(device)
-    optimizer = optim.Adam(lstm.parameters(), lr=0.001)
+    gru = GRUClassifier(1, 32, 2, num_classes).to(device)
+    optimizer = optim.Adam(gru.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
     loss_fun = nn.CrossEntropyLoss(weight=class_weights)
     num_epochs = 500
 
-    lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
+    gru = train_gru(gru, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
 
     preds = torch.tensor([], dtype=torch.float32)
     with torch.no_grad():
@@ -147,23 +144,16 @@ def main():
         # test_data_len = torch.tensor(len(test_data))
         for iterator in range(1, len(test) + 1, 1):
             test_data, test_data_len = torch.tensor(test[iterator - 1:iterator], dtype=torch.float32, device=device, pin_memory=True).unsqueeze(2), torch.tensor(len(test[0]) - 1).to(device)
-            test_hidden, test_state = lstm.init_hidden(1)
-            test_hidden, test_state = test_hidden.to(device), test_state.to(device)
+            test_hidden = gru.init_hidden(1).to(device)
             # test_hidden = test_hidden.squeeze(dim = 0)
             # test_state = test_state.squeeze(dim = 0)
             # test_data_size, test_hidden_size, test_state_size = test_data.size(), test_hidden.size(), test_state.size()
-            preds_tmp, _ = lstm(test_data, test_data_len, (test_hidden, test_state))
+            preds_tmp, _ = gru(test_data, test_data_len, test_hidden)
             preds_tmp = torch.argmax(preds_tmp, dim=1)
             preds = torch.cat((preds, preds_tmp.to("cpu")), dim = 0)
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
-    dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
-
-
-
-
-
-
+    # dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
 
 
 if __name__ == "__main__":
