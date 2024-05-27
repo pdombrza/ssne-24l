@@ -4,13 +4,14 @@ from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
 import numpy as np
 import pandas as pd
 
 from functools import partial
 from collections import Counter
 import pickle
+
+from recursion import calculate_class_weights
 
 
 class SequenceDataset(Dataset):
@@ -30,19 +31,20 @@ class LSTMClassifier(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.4, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
-        self.softmax = nn.Softmax()
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
+        self._batchNorm = nn.BatchNorm1d(hidden_size*2)
+        self.fc = nn.Linear(hidden_size*2, num_classes)
 
     def init_hidden(self, batch_size):
-        hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        state = torch.zeros(self.num_layers, batch_size, self.hidden_size)
+        hidden = torch.zeros(self.num_layers*2, batch_size, self.hidden_size)
+        state = torch.zeros(self.num_layers*2, batch_size, self.hidden_size)
         return hidden, state
 
     def forward(self, x, len_x, hidden):
         all_outputs, hidden = self.lstm(x, hidden)
         out = all_outputs[torch.arange(all_outputs.size(0)), len_x]
-        x = self.fc(out)
+        x = self._batchNorm(out)
+        x = self.fc(x)
         return x, hidden
 
 
@@ -51,7 +53,6 @@ def load_data(path):
         data = pickle.load(fh)
     return data
 
-
 def prepare_cuda():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
@@ -59,12 +60,6 @@ def prepare_cuda():
 
     torch.backends.cudnn.determinstic = True
     torch.backends.cudnn.benchmark = False
-
-
-
-def calculate_class_weights(class_counts):
-    class_weights = torch.tensor([1 / class_count for class_count in class_counts.values()])
-    return class_weights
 
 
 def pad_collate(batch, pad_value):
@@ -77,7 +72,7 @@ def pad_collate(batch, pad_value):
     return xx_pad, yy, x_lens
 
 
-def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device):
+def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, num_epochs, device):
     for epoch in range(num_epochs):
         losses_epoch = []
         for x, targets, x_len in train_loader:
@@ -91,17 +86,7 @@ def train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader,
             loss.backward()
             optimizer.step()
         if epoch % 10 == 0:
-            valid_acc = 0
-            batch_count = 0
-            with torch.no_grad():
-                for valid_x, valid_targets, valid_len_x in valid_loader:
-                    valid_x, valid_targets, valid_len_x = valid_x.to(device), valid_targets.to(device), torch.tensor(valid_len_x).to(device)
-                    valid_hidden, valid_state = lstm.init_hidden(valid_x.size(0))
-                    valid_hidden, valid_state = valid_hidden.to(device), valid_state.to(device)
-                    preds, _ = lstm(valid_x, valid_len_x, (valid_hidden, valid_state))
-                    valid_acc += (torch.argmax(preds, dim=1) == valid_targets).sum().item() / len(valid_targets)
-                    batch_count += 1
-            print(f"Epoch: {epoch}, loss: {np.mean(np.array(losses_epoch)):.4}, valid acc: {valid_acc/batch_count:.4}")
+            print(f"Epoch: {epoch}, loss: {np.mean(np.array(losses_epoch)):.4}")
         scheduler.step()
     return lstm
 
@@ -116,60 +101,53 @@ def main():
     # test = test.type(torch.float32)
     # test = test.unsqueeze(2)
     # size = test.size()
-    # prepare_cuda()
-    X = [seq for seq, _ in train]
-    y = [label for _, label in train]
-    X_train, X_valid, y_train, y_valid = train_test_split(X, y, random_state=42, train_size=0.8)
-    train = list(zip(X_train, y_train))
-    valid = list(zip(X_valid, y_valid))
+    prepare_cuda()
+
+    train_dataset = SequenceDataset(train)
+
+    batch_size = 32
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
+    # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
+
     classes = [label for _, label in train]
     class_counts = dict(Counter(classes))
     class_weights = calculate_class_weights(class_counts).to(device)
 
-    train_dataset = SequenceDataset(train)
-    valid_dataset = SequenceDataset(valid)
-    # train_size = int(0.8 * len(train_dataset))
-    # valid_size = len(train_dataset) - train_size
-    # train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
-
-
-    batch_size = 32
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, collate_fn=partial(pad_collate, pad_value=0), drop_last=True)
-    # test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_last=False)
-
     num_classes = 5
-    lstm = LSTMClassifier(1, 68, 2, num_classes).to(device)
-    optimizer = optim.Adam(lstm.parameters(), lr=0.001)
+    lstm = LSTMClassifier(1, 75, 2, num_classes).to(device)
+    optimizer = optim.Adam(lstm.parameters(), lr=0.001, weight_decay=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
     loss_fun = nn.CrossEntropyLoss(weight=class_weights)
-    num_epochs = 500
+    num_epochs = 150
 
-    lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
+    lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, num_epochs, device)
 
     preds = torch.tensor([], dtype=torch.float32)
     with torch.no_grad():
         # test_data = test
         # test_data_len = torch.tensor(len(test_data))
-        for iterator in range(1, len(test) + 1, 1):
-            test_data, test_data_len = torch.tensor(test[iterator - 1:iterator], dtype=torch.float32, device=device, pin_memory=True).unsqueeze(2), torch.tensor(len(test[0]) - 1).to(device)
-            test_hidden, test_state = lstm.init_hidden(1)
+        for iterator in range(2, len(test) + 2, 2):
+            to_substract = 2
+            if iterator == 1104:
+                iterator = 1103
+                to_substract = 1
+            test_data, test_data_len = torch.tensor(test[iterator - to_substract:iterator], dtype=torch.float32, device=device, pin_memory=True).unsqueeze(2), torch.tensor(len(test[0]) - 1).to(device)
+            if test_data.size(0) == 1:
+                test_data = torch.cat((test_data, test_data), dim = 0)
+            test_hidden, test_state = lstm.init_hidden(2)
             test_hidden, test_state = test_hidden.to(device), test_state.to(device)
             # test_hidden = test_hidden.squeeze(dim = 0)
             # test_state = test_state.squeeze(dim = 0)
             # test_data_size, test_hidden_size, test_state_size = test_data.size(), test_hidden.size(), test_state.size()
             preds_tmp, _ = lstm(test_data, test_data_len, (test_hidden, test_state))
             preds_tmp = torch.argmax(preds_tmp, dim=1)
+            if iterator == 1103:
+                preds_tmp = preds_tmp[0]
+                preds_tmp = preds_tmp.unsqueeze(dim=0)
             preds = torch.cat((preds, preds_tmp.to("cpu")), dim = 0)
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
-    # dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
-
-
-
-
-
-
+    dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
 
 
 if __name__ == "__main__":

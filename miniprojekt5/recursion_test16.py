@@ -1,6 +1,7 @@
 import torch
 import torch.utils
 from torch.utils.data import DataLoader, Dataset, random_split
+from sklearn.model_selection import train_test_split
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn as nn
 import torch.optim as optim
@@ -113,10 +114,17 @@ def main():
     # size = test.size()
     prepare_cuda()
 
+    # train_dataset = SequenceDataset(train)
+    # train_size = int(0.8 * len(train_dataset))
+    # valid_size = len(train_dataset) - train_size
+    # train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
+    X = [seq for seq, _ in train]
+    y = [label for _, label in train]
+    X_train, X_valid, y_train, y_valid = train_test_split(X, y, random_state=42, train_size=0.8)
+    train = list(zip(X_train, y_train))
+    valid = list(zip(X_valid, y_valid))
     train_dataset = SequenceDataset(train)
-    train_size = int(0.8 * len(train_dataset))
-    valid_size = len(train_dataset) - train_size
-    train_dataset, valid_dataset = random_split(train_dataset, [train_size, valid_size])
+    valid_dataset = SequenceDataset(valid)
 
     batch_size = 32
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=partial(pad_collate, pad_value=0), drop_last=True, pin_memory=True, num_workers=4)
@@ -132,7 +140,7 @@ def main():
     optimizer = optim.Adam(lstm.parameters(), lr=0.001, weight_decay=0.001)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
     loss_fun = nn.CrossEntropyLoss(weight=class_weights)
-    num_epochs = 100
+    num_epochs = 120
 
     lstm = train_lstm(lstm, optimizer, scheduler, loss_fun, train_loader, valid_loader, num_epochs, device)
 
@@ -162,12 +170,6 @@ def main():
     preds_array = preds.numpy()
     dataframe = pd.DataFrame(preds_array)
     dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
-
-
-
-
-
-
 
 
 if __name__ == "__main__":

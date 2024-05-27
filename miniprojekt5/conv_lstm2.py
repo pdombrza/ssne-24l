@@ -34,7 +34,7 @@ class LSTMClassifier(nn.Module):
         self.hidden_size = hidden_size
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=16, kernel_size=3, padding='same')
         self.relu = nn.ReLU()
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
+        self.lstm = nn.LSTM(input_size=16, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
         self._batchNorm = nn.BatchNorm1d(hidden_size*2)
         self.fc = nn.Linear(hidden_size*2, num_classes)
 
