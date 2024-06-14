@@ -6,12 +6,15 @@ miniprojekt3/data/*
 miniprojekt3/test_all/*
 miniprojekt3/train/*
 miniprojekt4/*.pt
+miniprojekt6/data/*
 lab1
 lab3
+lab14
 
 *.zip
 *.txt
 *.pkl
+*.pk
 
 trafic_32
 cvae_model
