@@ -4,28 +4,10 @@ from torch.optim import Adam
 from torch import nn
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import numpy as np
-from datasets import Dataset
 import evaluate
 from tqdm import tqdm
-import pandas as pd
-from sklearn.model_selection import train_test_split
 
-
-def prepare_cuda():
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-
-    torch.backends.cudnn.determinstic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def prep_data(path, test_size):
-    data = pd.read_csv(path)
-    train, valid = train_test_split(data, test_size=test_size, random_state=42)
-    train = Dataset.from_pandas(train)
-    valid = Dataset.from_pandas(valid)
-    return train, valid
+from util import prepare_cuda, prep_data
 
 
 def main():
