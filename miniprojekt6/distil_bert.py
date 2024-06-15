@@ -7,7 +7,7 @@ import numpy as np
 import evaluate
 from tqdm import tqdm
 
-from util import prepare_cuda, prep_data
+from util import prepare_cuda, prep_data, get_class_weights
 
 
 def main():

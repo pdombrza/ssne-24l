@@ -51,3 +51,10 @@ def augment_data(trainset):
         }
     trainset = pd.concat([trainset, pd.DataFrame(augmented_data)], ignore_index=True)
     return trainset
+
+
+def get_class_weights(data):
+    class_counts = dict(data["rating"].value_counts())
+    labels, counts = zip(*class_counts.items())
+    class_weights = torch.tensor([1.0 / count for count in counts], dtype=torch.float32)
+    return class_weights
