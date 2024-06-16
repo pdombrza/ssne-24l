@@ -14,15 +14,21 @@ def prepare_cuda():
     torch.backends.cudnn.benchmark = False
 
 
-def prep_data(path, test_size, augment=True):
+def load_train_valid(path, test_size):
     data = pd.read_csv(path)
     train, valid = train_test_split(data, test_size=test_size, random_state=42)
+    return train, valid
+
+
+def prep_data(path, test_size, augment=True):
+    train, valid = load_train_valid(path, test_size)
     if augment:
         train = augment_data(train)
     class_weights = get_class_weights(train)
     train = Dataset.from_pandas(train)
     valid = Dataset.from_pandas(valid)
     return train, valid, class_weights
+
 
 def augment_data(trainset):
     syn_aug = naw.SynonymAug()

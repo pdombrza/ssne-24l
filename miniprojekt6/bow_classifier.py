@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
-from torch.utils.data import Dataset, DataLoader
 from nltk.corpus import stopwords
 from bs4 import BeautifulSoup
 from sklearn.model_selection import train_test_split
@@ -11,7 +9,6 @@ from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
 import numpy as np
 import re
-from collections import Counter
 from util import augment_data, prepare_cuda, get_class_weights
 
 
@@ -19,9 +16,15 @@ class BoWClassifier(nn.Module):
     def __init__(self):
         super(BoWClassifier, self).__init__()
         self.classifier = nn.Sequential(
-            nn.Linear(1000, 500),
+            nn.Linear(1000, 800),
             nn.LeakyReLU(),
-            nn.Linear(500, 50),
+            nn.Linear(800, 600),
+            nn.LeakyReLU(),
+            nn.Linear(600, 400),
+            nn.LeakyReLU(),
+            nn.Linear(400, 200),
+            nn.LeakyReLU(),
+            nn.Linear(200, 50),
             nn.LeakyReLU(),
             nn.Linear(50, 5),
         )
@@ -77,7 +80,7 @@ def main():
     train, valid = train_test_split(original_data, test_size=0.15, random_state=42)
     train = train.reset_index(drop=True)
     valid = valid.reset_index(drop=True)
-    # train = augment_data(train)
+    train = augment_data(train)
 
     class_weigths = get_class_weights(train).to(device)
 
