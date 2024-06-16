@@ -30,6 +30,21 @@ def prep_data(path, test_size, augment=True):
     return train, valid, class_weights
 
 
+def prep_data_nosplit(path, augment=True):
+    train = pd.read_csv(path)
+    if augment:
+        train = augment_data(train)
+    class_weights = get_class_weights(train)
+    train = Dataset.from_pandas(train)
+    return train, class_weights
+
+
+def prep_data_test(path):
+    test = pd.read_csv(path)
+    test = Dataset.from_pandas(test)
+    return test
+
+
 def augment_data(trainset):
     syn_aug = naw.SynonymAug()
     for i in range(4):

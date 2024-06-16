@@ -21,8 +21,7 @@ def main():
     model = fasttext.train_supervised(input="fasttext_data/train.csv", epoch=700, lr=0.5)
     result = model.test("fasttext_data/valid.csv")
     print("Number of examples:", result[0])
-    print("Precision:", result[1])
-    print("Recall:", result[2])
+    print("Accuracy:", result[1])
 
 if __name__ == "__main__":
     main()

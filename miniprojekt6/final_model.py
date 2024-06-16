@@ -4,10 +4,10 @@ from torch.optim import Adam
 from torch import nn
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import numpy as np
-import evaluate
 from tqdm import tqdm
+import pandas as pd
 
-from util import prepare_cuda, prep_data, get_class_weights
+from util import prepare_cuda, prep_data_nosplit, prep_data_test
 
 
 def main():
@@ -15,8 +15,10 @@ def main():
     prepare_cuda()
     train_data = "data/train_data.csv"
     test_data = "data/test_data.csv"
-    train, valid, class_weights = prep_data(train_data, 0.15, augment=True)
+    train, class_weights = prep_data_nosplit(train_data, augment=True)
     class_weights = class_weights.to(device)
+
+    test = prep_data_test(test_data)
 
     model_name = "distilbert-base-uncased"
     tokenizer = DistilBertTokenizer.from_pretrained(model_name)
@@ -27,14 +29,16 @@ def main():
     
     tokenized_train = train.map(preprocess_function, batched=True)
     tokenized_train = tokenized_train.remove_columns(["review"])
-    tokenized_val = valid.map(preprocess_function, batched=True)
-    tokenized_val = tokenized_val.remove_columns(["review"])
     tokenized_train.set_format("torch")
-    tokenized_val.set_format("torch")
+
+    tokenized_test = test.map(preprocess_function, batched=True)
+    tokenized_test = tokenized_test.remove_columns(["review"])
+    tokenized_test.set_format("torch")
+
 
     batch_size = 16
     train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(tokenized_train, batch_size=batch_size)
+    test_loader = DataLoader(tokenized_test, batch_size=1, shuffle=False)
     optimizer = Adam(model.parameters(), lr=0.00002)
     model.to(device)
     loss_fn = nn.CrossEntropyLoss(weight=class_weights)
@@ -58,24 +62,20 @@ def main():
 
     torch.save(model.state_dict(), "distil_bert_state_dict")
 
-    metric = evaluate.load("accuracy")
-
-    
-    model.eval()
-    for batch in tqdm(val_loader):
-        labels = batch["rating"].to(device)
+    preds = torch.tensor([], dtype=torch.int16)
+    for batch in tqdm(test_loader):
         batch = {"attention_mask": batch['attention_mask'].to(device), "input_ids": batch['input_ids'].to(device)}#, "token_type_ids":batch['token_type_ids'].to(device)}
 
         with torch.no_grad():
             outputs = model(**batch)
 
         logits = outputs.logits
-        predictions = torch.argmax(logits, dim=-1)
-        metric.add_batch(predictions=predictions, references=labels)
-    
+        predictions_tmp = torch.argmax(logits, dim=-1)
+        preds = torch.cat((preds, predictions_tmp.to("cpu")), dim=0)
 
-    score = metric.compute()
-    print(score)
+    preds_array = preds.numpy()
+    dataframe = pd.DataFrame(preds_array)
+    dataframe.to_csv("piatek_Dombrzalski_Kiełbus.csv", header=False, index=False)
 
 
 
