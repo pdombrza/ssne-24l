@@ -15,7 +15,8 @@ def main():
     prepare_cuda()
     train_data = "data/train_data.csv"
     test_data = "data/test_data.csv"
-    train, valid = prep_data(train_data, 0.15)
+    train, valid, class_weights = prep_data(train_data, 0.15, augment=True)
+    class_weights = class_weights.to(device)
 
     model_name = "distilbert-base-uncased"
     tokenizer = DistilBertTokenizer.from_pretrained(model_name)
@@ -25,18 +26,18 @@ def main():
         return tokenizer(examples['review'],  padding="max_length", truncation=True)
     
     tokenized_train = train.map(preprocess_function, batched=True)
-    tokenized_train = tokenized_train.remove_columns(["review", "__index_level_0__"])
+    tokenized_train = tokenized_train.remove_columns(["review"])
     tokenized_val = valid.map(preprocess_function, batched=True)
-    tokenized_val = tokenized_val.remove_columns(["review", "__index_level_0__"])
+    tokenized_val = tokenized_val.remove_columns(["review"])
     tokenized_train.set_format("torch")
     tokenized_val.set_format("torch")
 
     batch_size = 16
     train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(tokenized_train, batch_size=batch_size)
-    optimizer = Adam(model.parameters(), lr=0.0002)
+    optimizer = Adam(model.parameters(), lr=0.00002)
     model.to(device)
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights)
 
     num_epochs = 5
 

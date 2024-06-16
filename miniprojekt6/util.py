@@ -19,12 +19,30 @@ def prep_data(path, test_size, augment=True):
     train, valid = train_test_split(data, test_size=test_size, random_state=42)
     if augment:
         train = augment_data(train)
+    class_weights = get_class_weights(train)
     train = Dataset.from_pandas(train)
     valid = Dataset.from_pandas(valid)
-    return train, valid
-
+    return train, valid, class_weights
 
 def augment_data(trainset):
+    syn_aug = naw.SynonymAug()
+    for i in range(4):
+        to_augment = trainset.loc[trainset['rating'] == i, 'review']
+        to_augment = to_augment.to_list()
+        augmented_data = syn_aug.augment(to_augment)
+        if i == 3:
+            val_counts = trainset['rating'].value_counts()
+            len_to_aug = val_counts[4] - val_counts[3]
+            augmented_data = augmented_data[:len_to_aug]
+        augmented_data = {
+            'review': augmented_data,
+            'rating': [i] * len(augmented_data),
+        }
+    trainset = pd.concat([trainset, pd.DataFrame(augmented_data)], ignore_index=True)
+    return trainset
+            
+
+def augment_data_full(trainset):
     syn_aug = naw.SynonymAug()
     spell_aug = naw.SpellingAug()
     ant_aug = naw.AntonymAug()
